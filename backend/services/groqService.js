@@ -5,7 +5,7 @@ class GroqService {
     this.apiKey = process.env.GROQ_API_KEY;
     this.baseURL = 'https://api.groq.com/openai/v1';
     this.maxRetries = 3;
-    this.retryDelay = 1000; // 1 second
+    this.retryDelay = 1000;
   }
 
   async generateIngredients(dishName, numPeople, dietType = 'Veg') {

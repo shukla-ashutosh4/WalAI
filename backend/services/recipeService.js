@@ -13,26 +13,83 @@ class RecipeService {
       // Step 2: Match ingredients with inventory (RAG functionality)
       const inventoryCheck = await this.matchInventoryWithRAG(recipeData.ingredients);
       
-      // Step 3: Get recommendations
-      const recommendations = groqService.getRecommendations(dishName);
+      // Step 3: Separate available and missing items
+      const availableItems = inventoryCheck.filter(item => item.inStock && item.hasEnoughStock);
+      const missingItems = inventoryCheck.filter(item => !item.inStock || !item.hasEnoughStock);
       
-      // Step 4: Find recommendation products in inventory
+      // Step 4: Get recommendations
+      const recommendations = await groqService.getRecommendations(dishName);
+      
+      // Step 5: Find recommendation products in inventory
       const recommendationProducts = await this.findRecommendationProducts(recommendations);
       
-      // Step 5: Save recipe to database
+      // Step 6: Save recipe to database
       const savedRecipe = await this.saveRecipe(recipeData);
       
+      // Step 7: Calculate statistics
+      const totalCost = this.calculateTotalCost(availableItems);
+      const availabilityPercentage = Math.round((availableItems.length / inventoryCheck.length) * 100);
+      
+      console.log(`✅ Recipe processed: ${availableItems.length}/${inventoryCheck.length} ingredients available (${availabilityPercentage}%)`);
+      
       return {
+        success: true,
         recipe: savedRecipe,
         inventoryCheck,
         recommendations: recommendationProducts,
-        availableItems: inventoryCheck.filter(item => item.inStock && item.availableQuantity >= item.quantity),
-        missingItems: inventoryCheck.filter(item => !item.inStock || item.availableQuantity < item.quantity),
-        totalCost: this.calculateTotalCost(inventoryCheck.filter(item => item.inStock && item.availableQuantity >= item.quantity))
+        availableItems: availableItems.map(item => ({
+          name: item.name || item.ingredient,
+          ingredient: item.ingredient,
+          requiredQuantity: item.quantity,
+          quantity: item.quantity,
+          unit: item.unit,
+          price: item.price,
+          totalPrice: item.totalPrice,
+          inventoryId: item.inventoryId,
+          productId: item.productId,
+          category: item.category,
+          isEssential: item.isEssential,
+          availableQuantity: item.availableQuantity,
+          image: item.image || `https://via.placeholder.com/100x100/4CAF50/white?text=${encodeURIComponent(item.name || item.ingredient)}`
+        })),
+        missingItems: missingItems.map(item => ({
+          name: item.name || item.ingredient,
+          ingredient: item.ingredient,
+          requiredQuantity: item.quantity,
+          quantity: item.quantity,
+          unit: item.unit,
+          category: item.category,
+          isEssential: item.isEssential,
+          alternatives: item.alternatives || [],
+          reason: item.inStock ? 'Insufficient quantity' : 'Not in stock'
+        })),
+        totalCost: totalCost,
+        availabilityPercentage: availabilityPercentage,
+        canMakeRecipe: availableItems.length > 0,
+        hasAllIngredients: missingItems.length === 0,
+        dishName: dishName,
+        servings: numPeople,
+        dietType: dietType,
+        generatedAt: new Date().toISOString()
       };
     } catch (error) {
       console.error('Recipe processing error:', error);
-      throw error;
+      
+      // Return a structured error response
+      return {
+        success: false,
+        recipe: null,
+        availableItems: [],
+        missingItems: [],
+        totalCost: 0,
+        availabilityPercentage: 0,
+        canMakeRecipe: false,
+        hasAllIngredients: false,
+        error: error.message,
+        dishName: dishName,
+        servings: numPeople,
+        dietType: dietType
+      };
     }
   }
 
@@ -75,32 +132,39 @@ class RecipeService {
         }
 
         if (inventoryItem) {
-          const isAvailableQuantity = inventoryItem.quantity >= ingredient.quantity;
+          const requiredQuantity = ingredient.quantity || 1;
+          const availableQuantity = inventoryItem.quantity || 0;
+          const hasEnoughStock = availableQuantity >= requiredQuantity;
+          
           results.push({
             ingredient: ingredient.ingredient,
-            quantity: ingredient.quantity,
-            unit: ingredient.unit,
-            category: ingredient.category,
-            isEssential: ingredient.isEssential,
+            name: inventoryItem.name,
+            quantity: requiredQuantity,
+            unit: ingredient.unit || inventoryItem.unit || 'pieces',
+            category: ingredient.category || inventoryItem.category,
+            isEssential: ingredient.isEssential !== false,
             inStock: true,
-            availableQuantity: inventoryItem.quantity,
-            price: inventoryItem.price,
-            productId: inventoryItem.productId._id,
+            availableQuantity: availableQuantity,
+            price: inventoryItem.price || 2.99,
+            productId: inventoryItem.productId?._id || inventoryItem._id,
             inventoryId: inventoryItem._id,
-            totalPrice: (inventoryItem.price * ingredient.quantity).toFixed(2),
-            hasEnoughStock: isAvailableQuantity,
-            name: inventoryItem.name
+            totalPrice: ((inventoryItem.price || 2.99) * requiredQuantity).toFixed(2),
+            hasEnoughStock: hasEnoughStock,
+            image: inventoryItem.productId?.image || inventoryItem.image,
+            description: inventoryItem.productId?.description || `Fresh ${inventoryItem.name}`,
+            stockStatus: hasEnoughStock ? 'available' : 'insufficient'
           });
-          console.log(`✅ Found: ${inventoryItem.name}`);
+          console.log(`✅ Found: ${inventoryItem.name} (${availableQuantity} ${ingredient.unit || 'pieces'} available)`);
         } else {
           // Find alternatives
           const alternatives = await this.findAlternatives(ingredient.ingredient, ingredient.category);
           results.push({
             ingredient: ingredient.ingredient,
-            quantity: ingredient.quantity,
-            unit: ingredient.unit,
-            category: ingredient.category,
-            isEssential: ingredient.isEssential,
+            name: ingredient.ingredient,
+            quantity: ingredient.quantity || 1,
+            unit: ingredient.unit || 'pieces',
+            category: ingredient.category || 'Common',
+            isEssential: ingredient.isEssential !== false,
             inStock: false,
             availableQuantity: 0,
             price: 0,
@@ -108,18 +172,20 @@ class RecipeService {
             inventoryId: null,
             totalPrice: 0,
             hasEnoughStock: false,
-            alternatives: alternatives
+            alternatives: alternatives,
+            stockStatus: 'unavailable'
           });
-                   console.log(`❌ Not found: ${ingredient.ingredient}`);
+          console.log(`❌ Not found: ${ingredient.ingredient}`);
         }
       } catch (error) {
         console.error(`Error matching ingredient ${ingredient.ingredient}:`, error);
         results.push({
           ingredient: ingredient.ingredient,
-          quantity: ingredient.quantity,
-          unit: ingredient.unit,
-          category: ingredient.category,
-          isEssential: ingredient.isEssential,
+          name: ingredient.ingredient,
+          quantity: ingredient.quantity || 1,
+          unit: ingredient.unit || 'pieces',
+          category: ingredient.category || 'Common',
+          isEssential: ingredient.isEssential !== false,
           inStock: false,
           availableQuantity: 0,
           price: 0,
@@ -127,7 +193,9 @@ class RecipeService {
           inventoryId: null,
           totalPrice: 0,
           hasEnoughStock: false,
-          alternatives: []
+          alternatives: [],
+          stockStatus: 'error',
+          error: error.message
         });
       }
     }
@@ -135,27 +203,38 @@ class RecipeService {
     return results;
   }
 
-  // Semantic search for better ingredient matching
+  // Enhanced semantic search for better ingredient matching
   async semanticSearch(ingredientName) {
     const synonyms = {
-      'pasta': ['spaghetti', 'penne', 'fusilli', 'noodles'],
-      'cheese': ['mozzarella', 'parmesan', 'cheddar'],
-      'sauce': ['tomato sauce', 'white sauce', 'marinara', 'alfredo'],
-      'oil': ['olive oil', 'cooking oil', 'vegetable oil'],
-      'meat': ['chicken', 'beef', 'ground beef', 'chicken breast'],
-      'vegetables': ['onions', 'garlic', 'bell peppers', 'spinach'],
-      'herbs': ['basil', 'oregano', 'thyme', 'parsley']
+      'pasta': ['spaghetti', 'penne', 'fusilli', 'noodles', 'macaroni', 'linguine'],
+      'cheese': ['mozzarella', 'parmesan', 'cheddar', 'swiss', 'gouda', 'feta'],
+      'sauce': ['tomato sauce', 'white sauce', 'marinara', 'alfredo', 'pesto'],
+      'oil': ['olive oil', 'cooking oil', 'vegetable oil', 'canola oil', 'sunflower oil'],
+      'meat': ['chicken', 'beef', 'ground beef', 'chicken breast', 'pork', 'turkey'],
+      'vegetables': ['onions', 'garlic', 'bell peppers', 'spinach', 'tomatoes', 'carrots'],
+      'herbs': ['basil', 'oregano', 'thyme', 'parsley', 'cilantro', 'rosemary'],
+      'spices': ['salt', 'pepper', 'paprika', 'cumin', 'turmeric', 'chili powder'],
+      'dairy': ['milk', 'butter', 'cream', 'yogurt', 'sour cream'],
+      'grains': ['rice', 'quinoa', 'barley', 'oats', 'wheat', 'flour'],
+      'legumes': ['beans', 'lentils', 'chickpeas', 'black beans', 'kidney beans']
     };
 
-    // Find synonyms
+    // Find synonyms and related terms
     let searchTerms = [ingredientName];
+    const ingredientLower = ingredientName.toLowerCase();
+    
     for (const [category, items] of Object.entries(synonyms)) {
-      if (items.some(item => ingredientName.toLowerCase().includes(item.toLowerCase()))) {
+      if (items.some(item => ingredientLower.includes(item.toLowerCase()) || item.toLowerCase().includes(ingredientLower))) {
+        searchTerms.push(...items);
+      }
+      if (ingredientLower.includes(category)) {
         searchTerms.push(...items);
       }
     }
 
-    // Search with synonyms
+    // Remove duplicates and search
+    searchTerms = [...new Set(searchTerms)];
+    
     for (const term of searchTerms) {
       const item = await Inventory.findOne({
         $or: [
@@ -167,6 +246,7 @@ class RecipeService {
       }).populate('productId');
 
       if (item) {
+        console.log(`🔍 Semantic match found: ${term} -> ${item.name}`);
         return item;
       }
     }
@@ -174,7 +254,7 @@ class RecipeService {
     return null;
   }
 
-  // Find alternatives for missing ingredients
+  // Enhanced alternatives finder
   async findAlternatives(ingredientName, category) {
     try {
       const alternatives = await Inventory.find({
@@ -183,27 +263,49 @@ class RecipeService {
             $or: [
               { category: category },
               { tags: { $in: [new RegExp(ingredientName, 'i')] } },
-              { searchKeywords: { $in: [new RegExp(ingredientName, 'i')] } }
+              { searchKeywords: { $in: [new RegExp(ingredientName, 'i')] } },
+              { name: { $regex: new RegExp(ingredientName.split(' ')[0], 'i') } } // First word match
             ]
           },
-          { inStock: true }
+          { inStock: true },
+          { quantity: { $gt: 0 } }
         ]
-      }).populate('productId').limit(3);
+      }).populate('productId').limit(5);
 
       return alternatives.map(alt => ({
         name: alt.name,
         price: alt.price,
-        productId: alt.productId._id,
+        productId: alt.productId?._id || alt._id,
         inventoryId: alt._id,
         quantity: alt.quantity,
-        unit: alt.unit
-      }));
+        unit: alt.unit,
+        category: alt.category,
+        similarity: this.calculateSimilarity(ingredientName, alt.name),
+        reason: `Alternative for ${ingredientName}`
+      })).sort((a, b) => b.similarity - a.similarity);
     } catch (error) {
       console.error('Error finding alternatives:', error);
       return [];
     }
   }
 
+  // Calculate similarity between ingredient names
+  calculateSimilarity(str1, str2) {
+    const s1 = str1.toLowerCase();
+    const s2 = str2.toLowerCase();
+    
+    // Simple similarity calculation
+    if (s1 === s2) return 1;
+    if (s1.includes(s2) || s2.includes(s1)) return 0.8;
+    
+    const words1 = s1.split(' ');
+    const words2 = s2.split(' ');
+    const commonWords = words1.filter(word => words2.includes(word));
+    
+    return commonWords.length / Math.max(words1.length, words2.length);
+  }
+
+  // Enhanced recommendation products finder
   async findRecommendationProducts(recommendations) {
     const products = [];
     
@@ -215,17 +317,23 @@ class RecipeService {
             { searchKeywords: { $in: [new RegExp(rec, 'i')] } },
             { tags: { $in: [new RegExp(rec, 'i')] } }
           ],
-          inStock: true
+          inStock: true,
+          quantity: { $gt: 0 }
         }).populate('productId');
 
         if (product) {
           products.push({
             name: product.name,
             price: product.price,
-            productId: product.productId._id,
+            productId: product.productId?._id || product._id,
             inventoryId: product._id,
             originalRecommendation: rec,
-            reason: 'Complements your recipe'
+            reason: 'Complements your recipe',
+            category: product.category,
+            image: product.productId?.image || product.image,
+            description: product.productId?.description || `Great addition to your recipe`,
+            quantity: product.quantity,
+            unit: product.unit
           });
         }
       } catch (error) {
@@ -236,25 +344,40 @@ class RecipeService {
     return products;
   }
 
+  // Enhanced recipe saving with better error handling
   async saveRecipe(recipeData) {
     try {
-      const existingRecipe = await Recipe.findOne({ name: recipeData.dish });
+      const existingRecipe = await Recipe.findOne({ 
+        name: { $regex: new RegExp(`^${recipeData.dish}$`, 'i') }
+      });
       
       if (existingRecipe) {
+        // Update view count and return existing recipe
+        existingRecipe.statistics = existingRecipe.statistics || {};
+        existingRecipe.statistics.views = (existingRecipe.statistics.views || 0) + 1;
+        await existingRecipe.save();
         return existingRecipe;
       }
 
       const newRecipe = new Recipe({
         name: recipeData.dish,
-        category: recipeData.dietType,
-        servings: recipeData.servings,
-        ingredients: recipeData.ingredients,
-        instructions: recipeData.instructions,
-        prepTime: recipeData.prepTime,
-        cookTime: recipeData.cookTime,
-        nutritionInfo: recipeData.nutritionInfo,
+        category: recipeData.dietType || 'General',
+        servings: recipeData.servings || 2,
+        ingredients: recipeData.ingredients || [],
+        instructions: recipeData.instructions || [],
+        prepTime: recipeData.prepTime || 30,
+        cookTime: recipeData.cookTime || 30,
+        nutritionInfo: recipeData.nutritionInfo || {},
         createdBy: 'AI',
-        source: 'Groq'
+        source: 'Groq',
+        isActive: true,
+        isPublic: true,
+        tags: [recipeData.dietType, 'AI-generated'],
+        statistics: {
+          views:  0,
+          likes: 0,
+          saves: 0
+        }
       });
       
       return await newRecipe.save();
@@ -262,12 +385,13 @@ class RecipeService {
       console.error('Error saving recipe:', error);
       return {
         name: recipeData.dish,
-        category: recipeData.dietType,
-        servings: recipeData.servings,
-        ingredients: recipeData.ingredients,
-        instructions: recipeData.instructions,
-        prepTime: recipeData.prepTime,
-        cookTime: recipeData.cookTime
+        category: recipeData.dietType || 'General',
+        servings: recipeData.servings || 2,
+        ingredients: recipeData.ingredients || [],
+        instructions: recipeData.instructions || [],
+        prepTime: recipeData.prepTime || 30,
+        cookTime: recipeData.cookTime || 30,
+        error: error.message
       };
     }
   }

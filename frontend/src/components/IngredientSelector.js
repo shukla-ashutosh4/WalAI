@@ -1,8 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Box,
-  Card,
-  CardContent,
   Typography,
   Button,
   Grid,
@@ -26,88 +24,190 @@ import {
   TextField,
   Divider,
   Paper,
-  Tooltip,
   Badge,
   Collapse,
-  Alert
+  Alert,
+  CircularProgress
 } from '@mui/material';
 import {
-  Kitchen as KitchenIcon,
   Add as AddIcon,
   Remove as RemoveIcon,
   ShoppingCart as ShoppingCartIcon,
   CheckCircle as CheckCircleIcon,
   RadioButtonUnchecked as RadioButtonUncheckedIcon,
-  ExpandMore as ExpandMoreIcon,
-  ExpandLess as ExpandLessIcon,
   Info as InfoIcon,
-  LocalOffer as OfferIcon,
   Warning as WarningIcon,
   Timer as TimerIcon,
-  Restaurant as RestaurantIcon
+  Restaurant as RestaurantIcon,
+  Refresh as RefreshIcon,
+  Inventory as InventoryIcon
 } from '@mui/icons-material';
+import axios from 'axios';
 
 const IngredientSelector = ({ 
   recipe,
   onAddToCart,
   onClose,
-  cartItems = []
+  cartItems = [],
+  userPreferences = {},
+  showSnackbar // Add this prop to receive snackbar function from parent
 }) => {
   const [selectedIngredients, setSelectedIngredients] = useState([]);
   const [quantities, setQuantities] = useState({});
-  const [showAlternatives, setShowAlternatives] = useState({});
   const [selectionMode, setSelectionMode] = useState('multiple');
   const [showUnavailable, setShowUnavailable] = useState(false);
   const [showInstructions, setShowInstructions] = useState(false);
+  
+  // New state for ingredient checking
+  const [ingredientAvailability, setIngredientAvailability] = useState({});
+  const [checkingAvailability, setCheckingAvailability] = useState(false);
+  const [availabilityChecked, setAvailabilityChecked] = useState(false);
 
-  // Extract ingredients from recipe
-  const ingredients = recipe?.ingredients || [];
-  const recipeInfo = {
+  // Memoize ingredients to prevent unnecessary re-renders
+  const ingredients = useMemo(() => {
+    return recipe?.ingredients || recipe?.availableItems || [];
+  }, [recipe?.ingredients, recipe?.availableItems]);
+
+  const missingIngredients = useMemo(() => {
+    return recipe?.missingItems || [];
+  }, [recipe?.missingItems]);
+
+  const recipeInfo = useMemo(() => ({
     name: recipe?.dish || recipe?.name || 'Recipe',
-    servings: recipe?.servings || 1,
+    servings: recipe?.servings || recipe?.numPeople || 1,
     prepTime: recipe?.prepTime || 0,
     cookTime: recipe?.cookTime || 0,
-    instructions: recipe?.instructions || []
-  };
+    instructions: recipe?.instructions || recipe?.steps || []
+  }), [recipe]);
+
+  // Default snackbar function if not provided
+  const handleShowSnackbar = useCallback((message, severity = 'success') => {
+    if (showSnackbar) {
+      showSnackbar(message, severity);
+    } else {
+      console.log(`${severity.toUpperCase()}: ${message}`);
+    }
+  }, [showSnackbar]);
+
+  // Check ingredient availability in inventory
+  const checkIngredientAvailability = useCallback(async () => {
+    if (ingredients.length === 0) return;
+    
+    setCheckingAvailability(true);
+    
+    try {
+      const token = localStorage.getItem('token');
+      const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+
+      const availabilityPromises = ingredients.map(async (ingredient) => {
+        const ingredientName = ingredient.ingredient || ingredient.name;
+        
+        try {
+          const response = await axios.post(
+            `${process.env.REACT_APP_API_URL || 'http://localhost:5000'}/api/products/check-ingredients`,
+            {
+              productName: ingredientName,
+              dietType: userPreferences.dietType || 'vegetarian',
+              servings: recipeInfo.servings
+            },
+            { headers }
+          );
+
+          return {
+            name: ingredientName,
+            available: response.data.success && response.data.data.hasIngredients,
+            details: response.data.data || {},
+            inStock: response.data.data.availableItems?.length > 0
+          };
+        } catch (error) {
+          console.error(`Failed to check availability for ${ingredientName}:`, error);
+          return {
+            name: ingredientName,
+            available: false,
+            details: {},
+            inStock: false,
+            error: true
+          };
+        }
+      });
+
+      const results = await Promise.all(availabilityPromises);
+      
+      const availabilityMap = {};
+      results.forEach(result => {
+        availabilityMap[result.name] = result;
+      });
+      
+      setIngredientAvailability(availabilityMap);
+      setAvailabilityChecked(true);
+      
+      const availableCount = results.filter(r => r.available).length;
+      handleShowSnackbar(
+        `Checked ${results.length} ingredients. ${availableCount} available in inventory.`,
+        availableCount > 0 ? 'success' : 'warning'
+      );
+      
+    } catch (error) {
+      console.error('Failed to check ingredient availability:', error);
+      handleShowSnackbar('Failed to check ingredient availability', 'error');
+    } finally {
+      setCheckingAvailability(false);
+    }
+  }, [ingredients, userPreferences.dietType, recipeInfo.servings, handleShowSnackbar]);
 
   useEffect(() => {
     // Initialize quantities from recipe
     const initialQuantities = {};
     ingredients.forEach(ingredient => {
       const key = ingredient.ingredient || ingredient.name;
-      initialQuantities[key] = ingredient.quantity || 1;
+      initialQuantities[key] = ingredient.requiredQuantity || ingredient.quantity || 1;
     });
     setQuantities(initialQuantities);
 
-    // Auto-select essential ingredients
-    const essentialIngredients = ingredients.filter(ing => ing.isEssential !== false);
+    // Auto-select essential ingredients and available items
+    const essentialIngredients = ingredients.filter(ing => 
+      ing.isEssential !== false || ing.inStock !== false
+    );
     setSelectedIngredients(essentialIngredients);
-  }, [ingredients]);
+
+    // Auto-check availability on load
+    if (ingredients.length > 0) {
+      checkIngredientAvailability();
+    }
+  }, [ingredients, checkIngredientAvailability]);
 
   // Check if ingredient is available in inventory
-  const isAvailable = (ingredient) => {
+  const isAvailable = useCallback((ingredient) => {
+    const ingredientName = ingredient.ingredient || ingredient.name;
+    const availability = ingredientAvailability[ingredientName];
+    
+    if (availability) {
+      return availability.available && availability.inStock;
+    }
+    
+    // Fallback to recipe data
     return ingredient.inStock !== false && (ingredient.availableQuantity || 0) > 0;
-  };
+  }, [ingredientAvailability]);
 
   // Check if ingredient is already in cart
-  const isInCart = (ingredientName) => {
+  const isInCart = useCallback((ingredientName) => {
     return cartItems.some(item => 
       item.name?.toLowerCase() === ingredientName?.toLowerCase()
     );
-  };
+  }, [cartItems]);
 
   // Get ingredient category color
-  const getCategoryColor = (category) => {
+  const getCategoryColor = useCallback((category) => {
     switch (category?.toLowerCase()) {
       case 'veg': return 'success';
       case 'non-veg': return 'error';
       case 'vegan': return 'info';
       default: return 'default';
     }
-  };
+  }, []);
 
   // Handle ingredient selection
-  const handleIngredientSelect = (ingredient, isSelected) => {
+  const handleIngredientSelect = useCallback((ingredient, isSelected) => {
     const ingredientKey = ingredient.ingredient || ingredient.name;
     
     if (selectionMode === 'single') {
@@ -121,35 +221,27 @@ const IngredientSelector = ({
       
       setSelectedIngredients(newSelection);
     }
-  };
+  }, [selectionMode, selectedIngredients]);
 
   // Handle quantity change
-  const handleQuantityChange = (ingredientName, newQuantity) => {
+  const handleQuantityChange = useCallback((ingredientName, newQuantity) => {
     setQuantities(prev => ({
       ...prev,
       [ingredientName]: Math.max(0, newQuantity)
     }));
-  };
-
-  // Toggle alternatives view
-  const toggleAlternatives = (ingredientName) => {
-    setShowAlternatives(prev => ({
-      ...prev,
-      [ingredientName]: !prev[ingredientName]
-    }));
-  };
+  }, []);
 
   // Add selected ingredients to cart
-  const handleAddSelectedToCart = () => {
+  const handleAddSelectedToCart = useCallback(() => {
     const itemsToAdd = selectedIngredients.map(ingredient => {
       const ingredientKey = ingredient.ingredient || ingredient.name;
       return {
-        _id: ingredient._id || `recipe-${ingredientKey}`,
+        _id: ingredient._id || ingredient.inventoryId || `recipe-${ingredientKey}`,
         name: ingredientKey,
-        price: ingredient.price || 2.99, // Default price if not available
-        quantity: quantities[ingredientKey] || ingredient.quantity || 1,
+        price: ingredient.price || 2.99,
+        quantity: quantities[ingredientKey] || ingredient.requiredQuantity || ingredient.quantity || 1,
         unit: ingredient.unit || 'pieces',
-        category: ingredient.category || 'Common',
+        category: ingredient.category || userPreferences.dietType || 'Common',
         isRecipeIngredient: true,
         recipeName: recipeInfo.name,
         image: ingredient.image || `https://via.placeholder.com/100x100/4CAF50/white?text=${encodeURIComponent(ingredientKey)}`,
@@ -158,20 +250,22 @@ const IngredientSelector = ({
     });
     
     onAddToCart(itemsToAdd);
+    handleShowSnackbar(`Added ${itemsToAdd.length} ingredients to cart!`, 'success');
     onClose();
-  };
+  }, [selectedIngredients, quantities, userPreferences.dietType, recipeInfo.name, onAddToCart, handleShowSnackbar, onClose]);
 
-  // Add all ingredients to cart
-  const handleAddAllToCart = () => {
-    const allItems = ingredients.map(ingredient => {
+  // Add all available ingredients to cart
+  const handleAddAllAvailableToCart = useCallback(() => {
+    const availableItems = ingredients.filter(ingredient => isAvailable(ingredient));
+    const itemsToAdd = availableItems.map(ingredient => {
       const ingredientKey = ingredient.ingredient || ingredient.name;
       return {
-        _id: ingredient._id || `recipe-${ingredientKey}`,
+        _id: ingredient._id || ingredient.inventoryId || `recipe-${ingredientKey}`,
         name: ingredientKey,
         price: ingredient.price || 2.99,
-        quantity: quantities[ingredientKey] || ingredient.quantity || 1,
+        quantity: quantities[ingredientKey] || ingredient.requiredQuantity || ingredient.quantity || 1,
         unit: ingredient.unit || 'pieces',
-        category: ingredient.category || 'Common',
+        category: ingredient.category || userPreferences.dietType || 'Common',
         isRecipeIngredient: true,
         recipeName: recipeInfo.name,
         image: ingredient.image || `https://via.placeholder.com/100x100/4CAF50/white?text=${encodeURIComponent(ingredientKey)}`,
@@ -179,27 +273,43 @@ const IngredientSelector = ({
       };
     });
     
-    onAddToCart(allItems);
+    onAddToCart(itemsToAdd);
+    handleShowSnackbar(`Added ${itemsToAdd.length} available ingredients to cart!`, 'success');
     onClose();
-  };
+  }, [ingredients, isAvailable, quantities, userPreferences.dietType, recipeInfo.name, onAddToCart, handleShowSnackbar, onClose]);
 
   // Calculate total cost
-  const calculateTotalCost = () => {
+  const calculateTotalCost = useCallback(() => {
     return selectedIngredients.reduce((total, ingredient) => {
       const ingredientKey = ingredient.ingredient || ingredient.name;
-      const quantity = quantities[ingredientKey] || ingredient.quantity || 1;
+      const quantity = quantities[ingredientKey] || ingredient.requiredQuantity || ingredient.quantity || 1;
       const price = ingredient.price || 2.99;
       return total + (price * quantity);
     }, 0).toFixed(2);
-  };
+  }, [selectedIngredients, quantities]);
 
   // Filter ingredients based on availability
-  const filteredIngredients = showUnavailable 
-    ? ingredients 
-    : ingredients.filter(ingredient => isAvailable(ingredient) || ingredient.isEssential);
+  const allIngredients = useMemo(() => {
+    return [...ingredients, ...missingIngredients.map(item => ({
+      ingredient: item.ingredient || item.name || item,
+      name: item.name || item.ingredient || item,
+      inStock: false,
+      availableQuantity: 0,
+      isMissing: true
+    }))];
+  }, [ingredients, missingIngredients]);
 
-  const availableCount = ingredients.filter(ingredient => isAvailable(ingredient)).length;
-  const unavailableCount = ingredients.length - availableCount;
+  const filteredIngredients = useMemo(() => {
+    return showUnavailable 
+      ? allIngredients 
+      : allIngredients.filter(ingredient => isAvailable(ingredient) || ingredient.isEssential);
+  }, [showUnavailable, allIngredients, isAvailable]);
+
+  const availableCount = useMemo(() => {
+    return allIngredients.filter(ingredient => isAvailable(ingredient)).length;
+  }, [allIngredients, isAvailable]);
+
+  const unavailableCount = allIngredients.length - availableCount;
 
   return (
     <Dialog 
@@ -219,16 +329,25 @@ const IngredientSelector = ({
               Recipe Ingredients
             </Typography>
           </Box>
-          <Badge badgeContent={selectedIngredients.length} color="primary">
-            <ShoppingCartIcon />
-          </Badge>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Badge badgeContent={selectedIngredients.length} color="primary">
+              <ShoppingCartIcon />
+            </Badge>
+            <IconButton 
+              onClick={checkIngredientAvailability} 
+              disabled={checkingAvailability}
+              size="small"
+            >
+              {checkingAvailability ? <CircularProgress size={20} /> : <RefreshIcon />}
+            </IconButton>
+          </Box>
         </Box>
         
         <Typography variant="h5" color="primary" sx={{ mt: 1, fontWeight: 'bold' }}>
           {recipeInfo.name}
         </Typography>
         
-        <Box sx={{ display: 'flex', gap: 2, mt: 1 }}>
+        <Box sx={{ display: 'flex', gap: 2, mt: 1, flexWrap: 'wrap' }}>
           <Chip 
             icon={<RestaurantIcon />} 
             label={`${recipeInfo.servings} servings`} 
@@ -242,6 +361,15 @@ const IngredientSelector = ({
               label={`${recipeInfo.prepTime + recipeInfo.cookTime} min total`} 
               size="small" 
               color="secondary" 
+              variant="outlined"
+            />
+          )}
+          {availabilityChecked && (
+            <Chip 
+              icon={<InventoryIcon />} 
+              label={`${availableCount}/${allIngredients.length} available`} 
+              size="small" 
+              color={availableCount > 0 ? 'success' : 'error'} 
               variant="outlined"
             />
           )}
@@ -268,12 +396,12 @@ const IngredientSelector = ({
                 </Typography>
                 <List dense>
                   {recipeInfo.instructions.map((instruction, index) => (
-                    <ListItem key={index} sx={{ py: 0.5 }}>
+                    <ListItem key={index} sx={{ py : 0.5 }}>
                       <ListItemText
                         primary={`${index + 1}. ${typeof instruction === 'string' ? instruction : instruction.instruction}`}
                         secondary={instruction.tips && `Tip: ${instruction.tips}`}
                       />
-                    </ListItem>
+                     </ListItem>
                   ))}
                 </List>
               </Paper>
@@ -514,7 +642,7 @@ const IngredientSelector = ({
         
         <Button
           variant="outlined"
-          onClick={handleAddAllToCart}
+          onClick={handleAddAllAvailableToCart}
           disabled={availableCount === 0}
         >
           Add All Available

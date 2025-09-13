@@ -6,6 +6,7 @@ const dotenv = require('dotenv');
 // Import models
 const Product = require('./models/Product');
 const Inventory = require('./models/Inventory');
+const MealPlan = require('./models/MealPlan');
 
 dotenv.config();
 const app = express();
@@ -531,7 +532,20 @@ app.get('/api/docs', (req, res) => {
     }
   });
 });
-
+app.post('/api/admin/seed-now', async (req, res) => {
+  try {
+    // Clear existing data
+    await Product.deleteMany({});
+    await Inventory.deleteMany({});
+    
+    // Run the seed function
+    await seedSampleData();
+    
+    res.json({ message: 'Data seeded successfully' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
 // Error handling middleware
 app.use((error, req, res, next) => {
   console.error('❌ Server Error:', error);

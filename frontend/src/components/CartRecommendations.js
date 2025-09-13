@@ -1,5 +1,5 @@
 // frontend/src/components/CartRecommendations.js
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Box,
   Card,
@@ -22,7 +22,15 @@ import {
   Badge,
   CircularProgress,
   Alert,
-  Container
+  Container,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Accordion,
+  AccordionSummary,
+  AccordionDetails,
+  Snackbar
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -36,7 +44,11 @@ import {
   CompareArrows as CompareIcon,
   Refresh as RefreshIcon,
   Whatshot as WhatshotIcon,
-  AccessTime as AccessTimeIcon
+  AccessTime as AccessTimeIcon,
+  Kitchen as KitchenIcon,
+  CheckCircle as CheckCircleIcon,
+  Cancel as CancelIcon,
+  Info as InfoIcon
 } from '@mui/icons-material';
 import axios from 'axios';
 
@@ -53,12 +65,77 @@ const CartRecommendations = ({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [activeTab, setActiveTab] = useState('alternatives'); // 'alternatives', 'complementary', 'similar'
+  
+  // New state for ingredient checking
+  const [checkingIngredients, setCheckingIngredients] = useState({});
+  const [showIngredientsDialog, setShowIngredientsDialog] = useState(false);
+  const [selectedProductIngredients, setSelectedProductIngredients] = useState(null);
+  const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
 
   useEffect(() => {
     if (cartItems.length > 0) {
       loadEnhancedRecommendations();
     }
   }, [cartItems]);
+
+  // Show snackbar notifications
+  const showSnackbar = useCallback((message, severity = 'success') => {
+    setSnackbar({ open: true, message, severity });
+  }, []);
+
+  // Check ingredient availability for a product
+  const checkProductIngredients = useCallback(async (product) => {
+    if (checkingIngredients[product._id]) return;
+    
+    setCheckingIngredients(prev => ({ ...prev, [product._id]: true }));
+    
+    try {
+      const token = localStorage.getItem('token');
+      const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+
+      const response = await axios.post(
+        `${process.env.REACT_APP_API_URL || 'http://localhost:5000'}/api/products/check-ingredients`,
+        {
+          productName: product.name,
+          dietType: userPreferences.dietType || 'vegetarian',
+          servings: 2
+        },
+        { headers }
+      );
+
+      if (response.data.success) {
+        const ingredientData = response.data.data;
+        
+        // Update the product with ingredient information
+        const updateProducts = (products) => 
+          products.map(p => 
+            p._id === product._id 
+              ? { ...p, ingredientAvailability: ingredientData }
+              : p
+          );
+
+        // Update all product arrays
+        setAlternativeBrands(updateProducts);
+        setComplementaryItems(updateProducts);
+        setSimilarProducts(updateProducts);
+        
+        // Show ingredient details dialog
+        setSelectedProductIngredients({
+          product,
+          ingredients: ingredientData
+        });
+        setShowIngredientsDialog(true);
+      } else {
+        console.error('Ingredient check failed:', response.data.message);
+        showSnackbar('Failed to check ingredient availability', 'error');
+      }
+    } catch (error) {
+      console.error('Failed to check ingredients:', error);
+      showSnackbar('Failed to check ingredient availability', 'error');
+    } finally {
+      setCheckingIngredients(prev => ({ ...prev, [product._id]: false }));
+    }
+  }, [userPreferences.dietType, showSnackbar, checkingIngredients]);
 
   const loadEnhancedRecommendations = async () => {
     setLoading(true);
@@ -165,11 +242,13 @@ const CartRecommendations = ({
     };
 
     onAddToCart && onAddToCart(cartItem);
+    showSnackbar(`${item.name} added to cart!`, 'success');
   };
 
   // Render recommendation card
   const renderRecommendationCard = (item, index) => {
     const inCart = isInCart(item._id, item.name);
+    const isCheckingThisItem = checkingIngredients[item._id];
 
     return (
       <Grid item xs={12} sm={6} md={4} lg={3} key={item._id || index}>
@@ -259,28 +338,78 @@ const CartRecommendations = ({
               </Box>
             )}
 
-            {/* Action Button */}
-            <Button
-              variant={inCart ? "outlined" : "contained"}
-              size="small"
-              startIcon={<AddIcon />}
-              onClick={() => handleAddToCart(item)}
-              disabled={inCart}
-              sx={{ 
-                borderRadius: 2, 
-                mt: 'auto',
-                fontSize: '0.8rem'
-              }}
-            >
-              {inCart ? 'In Cart' : 'Add to Cart'}
-            </Button>
+            {/* Action Buttons */}
+            <Box sx={{ display: 'flex', gap: 1, mt: 'auto' }}>
+              <Button
+                variant={inCart ? "outlined" : "contained"}
+                size="small"
+                startIcon={<AddIcon />}
+                onClick={() => handleAddToCart(item)}
+                disabled={inCart}
+                sx={{ 
+                  borderRadius: 2, 
+                  fontSize: '0.8rem',
+                  flexGrow: 1
+                }}
+              >
+                {inCart ? 'In Cart' : 'Add to Cart'}
+              </Button>
 
-            {/* Relevance Score */}
-            {item.relevanceScore && (
+              {/* Check Ingredients Button */}
+              <Button
+                variant="outlined"
+                size="small"
+                startIcon={isCheckingThisItem ? <CircularProgress size={16} /> : <KitchenIcon />}
+                onClick={() => checkProductIngredients(item)}
+                disabled={isCheckingThisItem}
+                sx={{ 
+                  borderRadius: 2, 
+                  fontSize: '0.7rem',
+                  minWidth: 'auto',
+                  px: 1
+                }}
+              >
+                {isCheckingThisItem ? '' : 'Check'}
+              </Button>
+            </Box>
+
+            {/* Ingredient Availability Display */}
+            {item.ingredientAvailability && (
               <Box sx={{ mt: 1 }}>
-                <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.7rem' }}>
-                  Match: {Math.round(item.relevanceScore * 100)}%
-                </Typography>
+                <Accordion>
+                  <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                    <Typography variant="caption" sx={{ fontSize: '0.7rem' }}>
+                      Ingredient Info
+                    </Typography>
+                  </AccordionSummary>
+                  <AccordionDetails>
+                    {item.ingredientAvailability.hasIngredients ? (
+                      <Box>
+                        <Box sx={{ display: 'flex', alignItems: 'center', mb: 0.5 }}>
+                          <CheckCircleIcon sx={{ fontSize: 12, color: 'success.main', mr: 0.5 }} />
+                          <Typography variant="caption" sx={{ fontSize: '0.7rem' }}>
+                            Available: {item.ingredientAvailability.availableItems.length}
+                          </Typography>
+                        </Box>
+                        {item.ingredientAvailability.missingItems.length > 0 && (
+                          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                            <CancelIcon sx={{ fontSize: 12, color: 'error.main', mr: 0.5 }} />
+                            <Typography variant="caption" sx={{ fontSize: '0.7rem' }}>
+                              Missing: {item.ingredientAvailability.missingItems.length}
+                            </Typography>
+                          </Box>
+                        )}
+                      </Box>
+                    ) : (
+                      <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                 <CancelIcon sx={{ fontSize: 12, color: 'error.main', mr: 0.5 }} />
+                        <Typography variant="caption" sx={{ fontSize: '0.7rem' }}>
+                          No ingredients available
+                        </Typography>
+                      </Box>
+                    )}
+                  </AccordionDetails>
+                </Accordion>
               </Box>
             )}
           </CardContent>
@@ -406,7 +535,7 @@ const CartRecommendations = ({
                 </Paper>
               ) : (
                 <>
-                   <Typography variant="h6" gutterBottom sx={{ mb: 2 }}>
+                  <Typography variant="h6" gutterBottom sx={{ mb: 2 }}>
                     Items That Go Well With Your Cart
                   </Typography>
                   <Grid container spacing={2}>
@@ -441,6 +570,41 @@ const CartRecommendations = ({
           )}
         </>
       )}
+
+      {/* Ingredient Availability Dialog */}
+      <Dialog 
+        open={showIngredientsDialog} 
+        onClose={() => setShowIngredientsDialog(false)} 
+        maxWidth="sm" 
+        fullWidth
+        PaperProps={{
+          sx: { borderRadius: '12px' }
+        }}
+      >
+        <DialogTitle sx={{ textAlign: 'center', fontWeight: 'bold', pb: 1 }}>
+          Ingredient Availability for {selectedProductIngredients?.product.name}
+        </DialogTitle>
+        <DialogContent>
+          {selectedProductIngredients && (
+            <Box>
+              <Typography variant="body2" color="text.secondary">
+                Available Ingredients: {selectedProductIngredients.ingredients.availableItems.length}
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Missing Ingredients: {selectedProductIngredients.ingredients.missingItems.length}
+              </Typography>
+              {selectedProductIngredients.ingredients.missingItems.length > 0 && (
+                <Typography variant="body2" color="error.main">
+                  Note: {selectedProductIngredients.ingredients.missingItems.join(', ')} are not available in inventory.
+                </Typography>
+              )}
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ p: 2, pt: 0 }}>
+          <Button onClick={() => setShowIngredientsDialog(false)}>Close</Button>
+        </DialogActions>
+      </Dialog>
     </Container>
   );
 };

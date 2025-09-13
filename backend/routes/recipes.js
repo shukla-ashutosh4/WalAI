@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const Recipe = require('../models/Recipe');
 const recipeService = require('../services/recipeService');
+const Inventory = require('../models/Inventory');
 
 // Middleware to authenticate token (optional for some endpoints)
 const authenticateToken = (req, res, next) => {
@@ -19,10 +20,10 @@ const authenticateToken = (req, res, next) => {
   next();
 };
 
-// Generate recipe from dish name (main feature)
+// Generate recipe from dish name (main feature) - ENHANCED
 router.post('/generate', authenticateToken, async (req, res) => {
   try {
-    const { dishName, numPeople = 2, dietType = 'Veg' } = req.body;
+    const { dishName, numPeople = 2, dietType = 'Veg', source = 'recipe-search' } = req.body;
 
     if (!dishName) {
       return res.status(400).json({ 
@@ -30,33 +31,182 @@ router.post('/generate', authenticateToken, async (req, res) => {
       });
     }
 
-    console.log(`🔍 Generating recipe for: ${dishName} (${numPeople} people, ${dietType})`);
+    console.log(`🔍 Generating recipe for: ${dishName} (${numPeople} people, ${dietType}) from ${source}`);
 
     // Use recipe service to process the request
     const result = await recipeService.processRecipeRequest(dishName, numPeople, dietType);
 
-    res.status(200).json({
+    // Enhanced response format for better integration
+    const response = {
+      success: true,
       message: 'Recipe generated successfully',
+      source: source,
+      query: dishName,
+      recipe: result.recipe,
+      availableItems: result.availableItems || [],
+      missingItems: result.missingItems || [],
+      totalIngredients: (result.availableItems?.length || 0) + (result.missingItems?.length || 0),
+      availabilityPercentage: result.availableItems?.length > 0 ? 
+        Math.round((result.availableItems.length / ((result.availableItems?.length || 0) + (result.missingItems?.length || 0))) * 100) : 0,
+      hasIngredients: (result.availableItems?.length || 0) > 0,
+      canMakeRecipe: (result.availableItems?.length || 0) > 0,
+      servings: numPeople,
+      dietType: dietType,
+      generatedAt: new Date().toISOString(),
       ...result
-    });
+    };
+
+    // Log success metrics
+    console.log(`✅ Recipe generated: ${result.availableItems?.length || 0} available, ${result.missingItems?.length || 0} missing ingredients`);
+
+    res.status(200).json(response);
 
   } catch (error) {
     console.error('Error generating recipe:', error);
     res.status(500).json({ 
+      success: false,
       message: 'Error generating recipe',
+      error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error',
+      availableItems: [],
+      missingItems: [],
+      hasIngredients: false
+    });
+  }
+});
+
+// Quick ingredient check for recipes
+router.post('/check-availability', authenticateToken, async (req, res) => {
+  try {
+    const { dishName, numPeople = 2, dietType = 'Veg' } = req.body;
+
+    if (!dishName) {
+      return res.status(400).json({ 
+        success: false,
+        message: 'Dish name is required' 
+      });
+    }
+
+    console.log(`🔍 Checking ingredient availability for: ${dishName}`);
+
+    try {
+      const result = await recipeService.processRecipeRequest(dishName, numPeople, dietType);
+      
+      res.status(200).json({
+        success: true,
+        dishName: dishName,
+        hasIngredients: (result.availableItems?.length || 0) > 0,
+        availableCount: result.availableItems?.length || 0,
+        missingCount: result.missingItems?.length || 0,
+        totalIngredients: (result.availableItems?.length || 0) + (result.missingItems?.length || 0),
+        availabilityPercentage: result.availableItems?.length > 0 ? 
+          Math.round((result.availableItems.length / ((result.availableItems?.length || 0) + (result.missingItems?.length || 0))) * 100) : 0,
+        canMakeRecipe: (result.availableItems?.length || 0) > 0,
+        availableItems: result.availableItems?.map(item => ({
+          name: item.name || item.ingredient,
+          quantity: item.requiredQuantity || item.quantity,
+          unit: item.unit,
+          price: item.price
+        })) || [],
+        missingItems: result.missingItems || []
+      });
+
+    } catch (recipeError) {
+      res.status(200).json({
+        success: false,
+        dishName: dishName,
+        hasIngredients: false,
+        availableCount: 0,
+        missingCount: 0,
+        totalIngredients: 0,
+        availabilityPercentage: 0,
+        canMakeRecipe: false,
+        message: 'Recipe not found or no ingredients available'
+      });
+    }
+
+  } catch (error) {
+    console.error('Error checking recipe availability:', error);
+    res.status(500).json({ 
+      success: false,
+      message: 'Error checking ingredient availability',
       error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
     });
   }
 });
 
-// Search recipes
+// Batch ingredient availability check
+router.post('/batch-check', authenticateToken, async (req, res) => {
+  try {
+    const { recipes = [], numPeople = 2, dietType = 'Veg' } = req.body;
+
+    if (!Array.isArray(recipes) || recipes.length === 0) {
+      return res.status(400).json({ 
+        success: false,
+        message: 'Recipes array is required' 
+      });
+    }
+
+    console.log(`🔍 Batch checking ${recipes.length} recipes`);
+
+    const results = await Promise.allSettled(
+      recipes.map(async (dishName) => {
+        try {
+          const result = await recipeService.processRecipeRequest(dishName, numPeople, dietType);
+          return {
+            dishName,
+            success: true,
+            hasIngredients: (result.availableItems?.length || 0) > 0,
+            availableCount: result.availableItems?.length || 0,
+            missingCount: result.missingItems?.length || 0,
+            availabilityPercentage: result.availableItems?.length > 0 ? 
+              Math.round((result.availableItems.length / ((result.availableItems?.length || 0) + (result.missingItems?.length || 0))) * 100) : 0
+          };
+        } catch (error) {
+          return {
+            dishName,
+            success: false,
+            hasIngredients: false,
+            availableCount: 0,
+            missingCount: 0,
+            availabilityPercentage: 0,
+            error: error.message
+          };
+        }
+      })
+    );
+
+    const processedResults = results.map(result => 
+      result.status === 'fulfilled' ? result.value : result.reason
+    );
+
+    res.status(200).json({
+      success: true,
+      results: processedResults,
+      totalChecked: recipes.length,
+      availableRecipes: processedResults.filter(r => r.hasIngredients).length
+    });
+
+  } catch (error) {
+    console.error('Error in batch check:', error);
+    res.status(500).json({ 
+      success: false,
+      message: 'Error in batch ingredient check',
+      error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+    });
+  }
+});
+
+// Search recipes with ingredient availability
 router.post('/search', authenticateToken, async (req, res) => {
   try {
     const { 
       query = '', 
       filters = {},
       page = 1,
-      limit = 20 
+      limit = 20,
+      checkAvailability = false,
+      numPeople = 2,
+      dietType = 'Veg'
     } = req.body;
 
     const recipes = await Recipe.searchRecipes(query, {
@@ -64,6 +214,34 @@ router.post('/search', authenticateToken, async (req, res) => {
       limit: parseInt(limit),
       skip: (parseInt(page) - 1) * parseInt(limit)
     });
+
+    // Add ingredient availability if requested
+    if (checkAvailability) {
+      for (let recipe of recipes) {
+        try {
+          const availabilityResult = await recipeService.processRecipeRequest(
+            recipe.name, 
+            numPeople, 
+            dietType
+          );
+          
+          recipe.ingredientAvailability = {
+            hasIngredients: (availabilityResult.availableItems?.length || 0) > 0,
+            availableCount: availabilityResult.availableItems?.length || 0,
+            missingCount: availabilityResult.missingItems?.length || 0,
+            availabilityPercentage: availabilityResult.availableItems?.length > 0 ? 
+              Math.round((availabilityResult.availableItems.length / ((availabilityResult.availableItems?.length || 0) + (availabilityResult.missingItems?.length || 0))) * 100) : 0
+          };
+        } catch (error) {
+          recipe.ingredientAvailability = {
+            hasIngredients: false,
+            availableCount: 0,
+            missingCount: 0,
+            availabilityPercentage: 0
+          };
+        }
+      }
+    }
 
     const totalRecipes = await Recipe.countDocuments({
       $and: [
@@ -85,13 +263,88 @@ router.post('/search', authenticateToken, async (req, res) => {
         totalItems: totalRecipes,
         totalPages: Math.ceil(totalRecipes / limit),
         limit: parseInt(limit)
-      }
+      },
+      checkAvailability: checkAvailability
     });
 
   } catch (error) {
     console.error('Error searching recipes:', error);
     res.status(500).json({ 
       message: 'Error searching recipes',
+      error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+    });
+  }
+});
+
+// Get recipe suggestions based on available ingredients
+router.post('/suggest-by-ingredients', authenticateToken, async (req, res) => {
+  try {
+    const { availableIngredients = [], dietType = 'Veg', limit = 10 } = req.body;
+
+    if (!Array.isArray(availableIngredients) || availableIngredients.length === 0) {
+      return res.status(400).json({ 
+        success: false,
+        message: 'Available ingredients array is required' 
+      });
+    }
+
+    console.log(`🔍 Finding recipes for ingredients: ${availableIngredients.join(', ')}`);
+
+    // Get available inventory items
+    const inventoryItems = await Inventory.find({
+      inStock: true,
+      name: { $in: availableIngredients.map(ing => new RegExp(ing, 'i')) }
+    });
+
+    // Find recipes that can be made with available ingredients
+    const recipes = await Recipe.find({
+      isActive: true,
+      isPublic: true,
+      'ingredients.ingredient': { 
+        $in: availableIngredients.map(ing => new RegExp(ing, 'i')) 
+      }
+    }).limit(parseInt(limit));
+
+    // Calculate match percentage for each recipe
+    const recipesWithMatch = recipes.map(recipe => {
+      const recipeIngredients = recipe.ingredients.map(ing => ing.ingredient.toLowerCase());
+      const availableInRecipe = availableIngredients.filter(available => 
+        recipeIngredients.some(recipeIng => 
+          recipeIng.includes(available.toLowerCase()) || available.toLowerCase().includes(recipeIng)
+        )
+      );
+      
+      const matchPercentage = Math.round((availableInRecipe.length / recipe.ingredients.length) * 100);
+      
+      return {
+        ...recipe.toObject(),
+        matchPercentage,
+        availableIngredients: availableInRecipe,
+        missingIngredients: recipe.ingredients.filter(ing => 
+          !availableInRecipe.some(available => 
+            ing.ingredient.toLowerCase().includes(available.toLowerCase()) || 
+            available.toLowerCase().includes(ing.ingredient.toLowerCase())
+          )
+        ).map(ing => ing.ingredient)
+      };
+    });
+
+    // Sort by match percentage
+    recipesWithMatch.sort((a, b) => b.matchPercentage - a.matchPercentage);
+
+    res.status(200).json({
+      success: true,
+      recipes: recipesWithMatch,
+      totalFound: recipesWithMatch.length,
+      availableIngredients: availableIngredients,
+      message: `Found ${recipesWithMatch.length} recipes matching your ingredients`
+    });
+
+  } catch (error) {
+    console.error('Error suggesting recipes by ingredients:', error);
+    res.status(500).json({ 
+      success: false,
+      message: 'Error suggesting recipes',
       error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
     });
   }
@@ -149,9 +402,10 @@ router.get('/', authenticateToken, async (req, res) => {
   }
 });
 
-// Get recipe by ID
+// Get recipe by ID with ingredient availability
 router.get('/:id', authenticateToken, async (req, res) => {
   try {
+    const { checkAvailability = false, numPeople, dietType = 'Veg' } = req .query;
     const recipe = await Recipe.findById(req.params.id)
       .populate('reviews.userId', 'name profile.avatar');
 
@@ -161,6 +415,21 @@ router.get('/:id', authenticateToken, async (req, res) => {
 
     // Increment view count
     await recipe.incrementViews();
+
+    if (checkAvailability) {
+      const availabilityResult = await recipeService.processRecipeRequest(
+        recipe.name, 
+        numPeople, 
+        dietType
+      );
+      recipe.ingredientAvailability = {
+        hasIngredients: (availabilityResult.availableItems?.length || 0) > 0,
+        availableCount: availabilityResult.availableItems?.length || 0,
+        missingCount: availabilityResult.missingItems?.length || 0,
+        availabilityPercentage: availabilityResult.availableItems?.length > 0 ? 
+          Math.round((availabilityResult.availableItems.length / ((availabilityResult.availableItems?.length || 0) + (availabilityResult.missingItems?.length || 0))) * 100) : 0
+      };
+    }
 
     res.status(200).json(recipe);
 
@@ -173,12 +442,27 @@ router.get('/:id', authenticateToken, async (req, res) => {
   }
 });
 
-// Get popular recipes
+// Get popular recipes with ingredient availability
 router.get('/featured/popular', authenticateToken, async (req, res) => {
   try {
-    const { limit = 10 } = req.query;
+    const { limit = 10, numPeople = 2, dietType = 'Veg' } = req.query;
     const recipes = await Recipe.getPopularRecipes(parseInt(limit));
     
+    for (let recipe of recipes) {
+      const availabilityResult = await recipeService.processRecipeRequest(
+        recipe.name, 
+        numPeople, 
+        dietType
+      );
+      recipe.ingredientAvailability = {
+        hasIngredients: (availabilityResult.availableItems?.length || 0) > 0,
+        availableCount: availabilityResult.availableItems?.length || 0,
+        missingCount: availabilityResult.missingItems?.length || 0,
+        availabilityPercentage: availabilityResult.availableItems?.length > 0 ? 
+          Math.round((availabilityResult.availableItems.length / ((availabilityResult.availableItems?.length || 0) + (availabilityResult.missingItems?.length || 0))) * 100) : 0
+      };
+    }
+
     res.status(200).json({
       recipes,
       message: 'Popular recipes fetched successfully'
@@ -193,12 +477,27 @@ router.get('/featured/popular', authenticateToken, async (req, res) => {
   }
 });
 
-// Get trending recipes
+// Get trending recipes with ingredient availability
 router.get('/featured/trending', authenticateToken, async (req, res) => {
   try {
-    const { limit = 10 } = req.query;
+    const { limit = 10, numPeople = 2, dietType = 'Veg' } = req.query;
     const recipes = await Recipe.getTrendingRecipes(parseInt(limit));
     
+    for (let recipe of recipes) {
+      const availabilityResult = await recipeService.processRecipeRequest(
+        recipe.name, 
+        numPeople, 
+        dietType
+      );
+      recipe.ingredientAvailability = {
+        hasIngredients: (availabilityResult.availableItems?.length || 0) > 0,
+        availableCount: availabilityResult.availableItems?.length || 0,
+        missingCount: availabilityResult.missingItems?.length || 0,
+        availabilityPercentage: availabilityResult.availableItems?.length > 0 ? 
+          Math.round((availabilityResult.availableItems.length / ((availabilityResult.availableItems?.length || 0) + (availabilityResult.missingItems?.length || 0))) * 100) : 0
+      };
+    }
+
     res.status(200).json({
       recipes,
       message: 'Trending recipes fetched successfully'
@@ -213,12 +512,27 @@ router.get('/featured/trending', authenticateToken, async (req, res) => {
   }
 });
 
-// Get quick recipes
+// Get quick recipes with ingredient availability
 router.get('/featured/quick', authenticateToken, async (req, res) => {
   try {
-    const { maxTime = 30, limit = 10 } = req.query;
+    const { maxTime = 30, limit = 10, numPeople = 2, dietType = 'Veg' } = req.query;
     const recipes = await Recipe.getQuickRecipes(parseInt(maxTime), parseInt(limit));
     
+    for (let recipe of recipes) {
+      const availabilityResult = await recipeService.processRecipeRequest(
+        recipe.name, 
+        numPeople, 
+        dietType
+      );
+      recipe.ingredientAvailability = {
+        hasIngredients: (availabilityResult.availableItems?.length || 0) > 0,
+        availableCount: availabilityResult.availableItems?.length || 0,
+        missingCount: availabilityResult.missingItems?.length || 0,
+        availabilityPercentage: availabilityResult.availableItems?.length > 0 ? 
+          Math.round((availabilityResult.availableItems.length / ((availabilityResult.availableItems?.length || 0) + (availabilityResult.missingItems?.length || 0))) * 100) : 0
+      };
+    }
+
     res.status(200).json({
       recipes,
       message: 'Quick recipes fetched successfully'
@@ -233,14 +547,29 @@ router.get('/featured/quick', authenticateToken, async (req, res) => {
   }
 });
 
-// Get recipes by category
+// Get recipes by category with ingredient availability
 router.get('/category/:category', authenticateToken, async (req, res) => {
   try {
     const { category } = req.params;
-    const { limit = 20 } = req.query;
+    const { limit = 20, numPeople = 2, dietType = 'Veg' } = req.query;
     
     const recipes = await Recipe.findByCategory(category, { limit: parseInt(limit) });
     
+    for (let recipe of recipes) {
+      const availabilityResult = await recipeService.processRecipeRequest(
+        recipe.name, 
+        numPeople, 
+        dietType
+      );
+      recipe.ingredientAvailability = {
+        hasIngredients: (availabilityResult.availableItems?.length || 0) > 0,
+        availableCount: availabilityResult.availableItems?.length || 0,
+        missingCount: availabilityResult.missingItems?.length || 0,
+        availabilityPercentage: availabilityResult.availableItems?.length > 0 ? 
+          Math.round((availabilityResult.availableItems.length / ((availabilityResult.availableItems?.length || 0) + (availabilityResult.missingItems?.length || 0))) * 100) : 0
+      };
+    }
+
     res.status(200).json({
       recipes,
       category,
@@ -256,7 +585,7 @@ router.get('/category/:category', authenticateToken, async (req, res) => {
   }
 });
 
-// Scale recipe
+// Scale recipe with ingredient availability
 router.post('/:id/scale', authenticateToken, async (req, res) => {
   try {
     const { servings } = req.body;
@@ -352,7 +681,7 @@ router.post('/:id/cooked', authenticateToken, async (req, res) => {
   }
 });
 
-// Get recipe shopping list
+// Get recipe shopping list with ingredient availability
 router.get('/:id/shopping-list', authenticateToken, async (req, res) => {
   try {
     const { servings } = req.query;

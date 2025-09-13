@@ -16,7 +16,7 @@ const sampleInventory = [
     tags: ["pasta", "italian", "wheat", "dinner"],
     description: "Premium Italian spaghetti pasta made from durum wheat",
     isIngredient: true,
-    image: "https://storage.googleapis.com/workspace-0f70711f-8b4e-4d94-86f1-2a93ccde5887/image/b2e47318-0c9f-4e5b-82b6-ff88fe15d58f.png"
+    image: "https://www.thegraciouspantry.com/wp-content/uploads/2024/01/spaghetti-recipe-v-1-.jpg"
   },
   {
     name: "Penne Pasta",
@@ -29,7 +29,7 @@ const sampleInventory = [
     tags: ["pasta", "italian", "wheat", "dinner"],
     description: "Classic penne pasta perfect for various sauces",
     isIngredient: true,
-    image: "https://storage.googleapis.com/workspace-0f70711f-8b4e-4d94-86f1-2a93ccde5887/image/b2e47318-0c9f-4e5b-82b6-ff88fe15d58f.png"
+    image: "https://i5.walmartimages.com/seo/Great-Value-Traditional-Basil-Pesto-6-7-oz-3-Servings_621fdee6-20cf-4f43-b8ec-5ab2d5d91607.4b817f556bc7bd0e7589f6ced30e39ab.jpeg?odnHeight=2000&odnWidth=2000&odnBg=FFFFFF"
   },
   {
     name: "Fusilli Pasta",
@@ -42,26 +42,26 @@ const sampleInventory = [
     tags: ["pasta", "italian", "spiral", "dinner"],
     description: "Spiral-shaped pasta that holds sauce perfectly",
     isIngredient: true,
-    image: "https://storage.googleapis.com/workspace-0f70711f-8b4e-4d94-86f1-2a93ccde5887/image/b2e47318-0c9f-4e5b-82b6-ff88fe15d58f.png"
+    image: "https://encrypted-tbn1.gstatic.com/images?q=tbn:ANd9GcQpgB-UmG7fb5tnKsmb_-QFThJ5qGgH3dzhc7sRSyaL2vu5xpjMNvBAzf8wnwCsS28bPk0idys7PTtDUzBDEXKKhc0C45MdbSuGCl9iNbmA"
   },
 
   // Sauces
   {
-    name: "Tomato Sauce",
+    name: "Bell Peppers",
     quantity: 30.0,
-    unit: "liter",
+    unit: "kg",
     price: 2.99,
     category: "food-grocery",
     dietaryTypes: ["Veg", "Vegan"],
-    searchKeywords: ["tomato sauce", "marinara", "red sauce", "pasta sauce"],
+    searchKeywords: ["bell peppers", "peppers", "vegetable", "fresh"],
     tags: ["sauce", "tomato", "pasta", "italian"],
     description: "Rich tomato sauce for pasta and pizza",
     isIngredient: true,
-    image: "https://storage.googleapis.com/workspace-0f70711f-8b4e-4d94-86f1-2a93ccde5887/image/f7f0ac0c-da1c-4e10-88bf-72243799fac4.png"
+    image: "https://i5.walmartimages.com/seo/Great-Value-Tomato-Sauce-8-oz-Can_e4ffb252-99f3-453d-9764-65a1a1cc1e50.16f5c2dd0954b853f81ed1e987960f1c.jpeg?odnHeight=2000&odnWidth=2000&odnBg=FFFFFF"
   },
   {
     name: "White Sauce",
-    quantity: 20.0,
+    quantity: 10.0,
     unit: "liter",
     price: 3.49,
     category: "food-grocery",
@@ -83,7 +83,7 @@ const sampleInventory = [
     tags: ["sauce", "basil", "pesto", "italian"],
     description: "Fresh basil pesto sauce with pine nuts",
     isIngredient: true,
-    image: "https://storage.googleapis.com/workspace-0f70711f-8b4e-4d94-86f1-2a93ccde5887/image/f7f0ac0c-da1c-4e10-88bf-72243799fac4.png"
+    image: "https://i5.walmartimages.com/seo/Great-Value-Traditional-Basil-Pesto-6-7-oz-3-Servings_621fdee6-20cf-4f43-b8ec-5ab2d5d91607.4b817f556bc7bd0e7589f6ced30e39ab.jpeg?odnHeight=2000&odnWidth=2000&odnBg=FFFFFF"
   },
 
   // Proteins
@@ -100,19 +100,6 @@ const sampleInventory = [
     isIngredient: true,
     image: "https://storage.googleapis.com/workspace-0f70711f-8b4e-4d94-86f1-2a93ccde5887/image/8f948a76-baa1-49ad-9aee-7f9e547cd86b.png"
   },
-  {
-    name: "Ground Beef",
-    quantity: 30.0,
-    unit: "kg",
-    price: 8.99,
-    category: "food-grocery",
-    dietaryTypes: ["Non-Veg"],
-    searchKeywords: ["beef", "ground beef", "meat", "protein"],
-    tags: ["meat", "protein", "beef", "ground"],
-    description: "Fresh ground beef for pasta and other dishes",
-    isIngredient: true,
-    image: "https://storage.googleapis.com/workspace-0f70711f-8b4e-4d94-86f1-2a93ccde5887/image/8f948a76-baa1-49ad-9aee-7f9e547cd86b.png"
-  },
 
   // Dairy & Cheese
   {
@@ -126,7 +113,7 @@ const sampleInventory = [
     tags: ["cheese", "dairy", "italian", "pasta"],
     description: "Fresh mozzarella cheese perfect for pasta and pizza",
     isIngredient: true,
-    image: "https://storage.googleapis.com/workspace-0f70711f-8b4e-4d94-86f1-2a93ccde5887/image/7aa82969-1459-4587-a1cc-21c604a4745a.png"
+    image: "https://encrypted-tbn3.gstatic.com/images?q=tbn:ANd9GcSClHPnZLGu2TnKqwWC7kYsCGJgHirkxo6IH09vVn-2G97R9Clzumu4QLxEA68Ezef2lrCwzpWIiHmSzxfBfqwcBRgnPY6lT2N2BBWIgJ4P_w"
   },
   {
     name: "Parmesan Cheese",
@@ -139,7 +126,7 @@ const sampleInventory = [
     tags: ["cheese", "dairy", "italian", "aged"],
     description: "Aged parmesan cheese for authentic Italian flavor",
     isIngredient: true,
-    image: "https://storage.googleapis.com/workspace-0f70711f-8b4e-4d94-86f1-2a93ccde5887/image/7aa82969-1459-4587-a1cc-21c604a4745a.png"
+    image: "https://i5.walmartimages.com/seo/Great-Value-Traditional-Basil-Pesto-6-7-oz-3-Servings_621fdee6-20cf-4f43-b8ec-5ab2d5d91607.4b817f556bc7bd0e7589f6ced30e39ab.jpeg?odnHeight=2000&odnWidth=2000&odnBg=FFFFFF"
   },
 
   // Vegetables & Seasonings
@@ -154,7 +141,7 @@ const sampleInventory = [
     tags: ["vegetable", "seasoning", "fresh", "aromatic"],
     description: "Fresh garlic bulbs for cooking",
     isIngredient: true,
-    image: "https://storage.googleapis.com/workspace-0f70711f-8b4e-4d94-86f1-2a93ccde5887/image/8f948a76-baa1-49ad-9aee-7f9e547cd86b.png"
+    image: "https://i5.walmartimages.com/seo/Spice-World-Fresh-Garlic-Sleeve-3-Count_1987f303-5f7b-4250-a4be-15735b797999.ee158276b27318447e0e876cc3b1291b.png?odnHeight=2000&odnWidth=2000&odnBg=FFFFFF"
   },
   {
     name: "Onions",
@@ -167,7 +154,7 @@ const sampleInventory = [
     tags: ["vegetable", "fresh", "cooking"],
     description: "Fresh yellow onions for cooking",
     isIngredient: true,
-    image: "https://storage.googleapis.com/workspace-0f70711f-8b4e-4d94-86f1-2a93ccde5887/image/8f948a76-baa1-49ad-9aee-7f9e547cd86b.png"
+    image: "https://i5.walmartimages.com/seo/Spice-World-Fresh-Garlic-Sleeve-3-Count_1987f303-5f7b-4250-a4be-15735b797999.ee158276b27318447e0e876cc3b1291b.png?odnHeight=2000&odnWidth=2000&odnBg=FFFFFF"
   },
   {
     name: "Bell Peppers",
@@ -180,7 +167,7 @@ const sampleInventory = [
     tags: ["vegetable", "fresh", "colorful"],
     description: "Colorful bell peppers for cooking",
     isIngredient: true,
-    image: "https://storage.googleapis.com/workspace-0f70711f-8b4e-4d94-86f1-2a93ccde5887/image/8f948a76-baa1-49ad-9aee-7f9e547cd86b.png"
+    image: "https://i5.walmartimages.com/seo/Fresh-Color-Bell-Peppers-3-Count_35eb8263-09ad-4149-8d97-51a0f44ff4da.e978648f96e2f9deff03d9a1742f8bb8.jpeg?odnHeight=2000&odnWidth=2000&odnBg=FFFFFF"
   },
   {
     name: "Spinach",
@@ -193,13 +180,13 @@ const sampleInventory = [
     tags: ["vegetable", "fresh", "leafy"],
     description: "Fresh spinach leaves for salads and cooking",
     isIngredient: true,
-    image: "https://storage.googleapis.com/workspace-0f70711f-8b4e-4d94-86f1-2a93ccde5887/image/8f948a76-baa1-49ad-9aee-7f9e547cd86b.png"
+    image: "https://i5.walmartimages.com/seo/Marketside-Fresh-Spinach-10-oz-Bag-Fresh_06e91afb-5594-48ee-abaf-9f1879ca1357.330698aedeb5f8861e30c6ec3a5208ee.jpeg?odnHeight=2000&odnWidth=2000&odnBg=FFFFFF"
   },
 
   // Oils & Condiments
   {
-    name: "Olive Oil",
-    quantity: 50.0,
+    name: "Great Value Olive Oil",
+    quantity: 2.0,
     unit: "liter",
     price: 7.99,
     category: "food-grocery",
@@ -208,11 +195,11 @@ const sampleInventory = [
     tags: ["oil", "cooking", "healthy", "mediterranean"],
     description: "Extra virgin olive oil for cooking and dressing",
     isIngredient: true,
-    image: "https://storage.googleapis.com/workspace-0f70711f-8b4e-4d94-86f1-2a93ccde5887/image/8f948a76-baa1-49ad-9aee-7f9e547cd86b.png"
+    image: "https://i5.walmartimages.com/seo/Great-Value-Extra-Virgin-Olive-Oil-17-fl-oz_10398a3f-b01a-4e0c-8d31-dbc0a8d48ac3.cd2dff0069377af46294b44b07d7526a.jpeg"
   },
   {
-    name: "Mayonnaise",
-    quantity: 20.0,
+    name: "Great Value Mayonnaise",
+    quantity: 10.0,
     unit: "liter",
     price: 4.99,
     category: "food-grocery",
@@ -221,13 +208,13 @@ const sampleInventory = [
     tags: ["condiment", "cream", "sandwich"],
     description: "Rich and creamy mayonnaise for sandwiches and salads",
     isIngredient: true,
-    image: "https://storage.googleapis.com/workspace-0f70711f-8b4e-4d94-86f1-2a93ccde5887/image/8f948a76-baa1-49ad-9aee-7f9e547cd86b.png"
+    image: "https://i5.walmartimages.com/seo/Great-Value-Mayonnaise-30-fl-oz_e54f72db-cc48-4893-b271-f168286d4c40.961603373498e9d99e9344ddd4e65c86.jpeg?odnHeight=2000&odnWidth=2000&odnBg=FFFFFF"
   },
 
   // Bread & Bakery
   {
-    name: "Whole Wheat Bread",
-    quantity: 100.0,
+    name: "Great Value Whole Wheat Bread",
+    quantity: 20.0,
     unit: "pieces",
     price: 2.49,
     category: "food-grocery",
@@ -236,7 +223,7 @@ const sampleInventory = [
     tags: ["bread", "wheat", "bakery", "breakfast"],
     description: "Fresh whole wheat bread perfect for sandwiches",
     isIngredient: true,
-    image: "https://storage.googleapis.com/workspace-0f70711f-8b4e-4d94-86f1-2a93ccde5887/image/14f49fd9-3401-461f-a905-56bdc9c75ed4.png"
+    image: "https://i5.walmartimages.com/seo/Great-Value-Mayonnaise-30-fl-oz_e54f72db-cc48-4893-b271-f168286d4c40.961603373498e9d99e9344ddd4e65c86.jpeg?odnHeight=2000&odnWidth=2000&odnBg=FFFFFF"
   },
   {
     name: "Garlic Bread",
@@ -252,34 +239,7 @@ const sampleInventory = [
     image: "https://storage.googleapis.com/workspace-0f70711f-8b4e-4d94-86f1-2a93ccde5887/image/14f49fd9-3401-461f-a905-56bdc9c75ed4.png"
   },
 
-  // Kitchen Items
-  {
-    name: "Non-Stick Frying Pan",
-    quantity: 25.0,
-    unit: "pieces",
-    price: 29.99,
-    category: "kitchen-items",
-    dietaryTypes: ["Veg", "Non-Veg", "Vegan"],
-    searchKeywords: ["frying pan", "non-stick", "cookware", "kitchen"],
-    tags: ["cookware", "pan", "kitchen", "cooking"],
-    description: "High-quality non-stick frying pan for healthy cooking",
-    isIngredient: false,
-    image: "https://storage.googleapis.com/workspace-0f70711f-8b4e-4d94-86f1-2a93ccde5887/image/6614e3f1-a3f5-4750-a30b-835fe9f48d47.png"
-  },
-  {
-    name: "Pasta Pot",
-    quantity: 15.0,
-    unit: "pieces",
-    price: 45.99,
-    category: "kitchen-items",
-    dietaryTypes: ["Veg", "Non-Veg", "Vegan"],
-    searchKeywords: ["pasta pot", "large pot", "cookware", "kitchen"],
-    tags: ["cookware", "pot", "kitchen", "pasta"],
-    description: "Large pot perfect for cooking pasta",
-    isIngredient: false,
-        image: "https://storage.googleapis.com/workspace-0f70711f-8b4e-4d94-86f1-2a93ccde5887/image/6614e3f1-a3f5-4750-a30b-835fe9f48d47.png"
-  },
-
+  
   // Herbs & Spices
   {
     name: "Italian Herbs",
@@ -292,7 +252,7 @@ const sampleInventory = [
     tags: ["herbs", "seasoning", "italian", "spices"],
     description: "Blend of Italian herbs for authentic flavor",
     isIngredient: true,
-    image: "https://storage.googleapis.com/workspace-0f70711f-8b4e-4d94-86f1-2a93ccde5887/image/8f948a76-baa1-49ad-9aee-7f9e547cd86b.png"
+    image: "https://i5.walmartimages.com/seo/Great-Value-Italian-Seasoning-2-oz_f528f37b-b694-491f-98d0-43151f91a0e9.daeed36e6c8a380fd002751528505d82.jpeg?odnHeight=2000&odnWidth=2000&odnBg=FFFFFF"
   },
   {
     name: "Black Pepper",
@@ -305,7 +265,7 @@ const sampleInventory = [
     tags: ["spice", "pepper", "seasoning", "cooking"],
     description: "Fresh ground black pepper for seasoning",
     isIngredient: true,
-    image: "https://storage.googleapis.com/workspace-0f70711f-8b4e-4d94-86f1-2a93ccde5887/image/8f948a76-baa1-49ad-9aee-7f9e547cd86b.png"
+    image: "https://i5.walmartimages.com/seo/Frontier-Co-op-Prime-Cuts-Citrus-Pepper-Blend-4-09-oz_6126f015-03a2-4bc7-b429-39d5b6fb8a6c.7b8902b2de88302afc529b931f19800b.jpeg?odnHeight=2000&odnWidth=2000&odnBg=FFFFFF"
   },
 
   // Beverages (Recommendations)
@@ -480,3 +440,4 @@ seedInventory().then(() => {
   console.error('💥 Seeding process failed:', error);
   process.exit(1);
 });
+
